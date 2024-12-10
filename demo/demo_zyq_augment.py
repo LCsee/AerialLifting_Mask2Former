@@ -25,7 +25,7 @@ import torch
 import cv2
 import albumentations as A
 import numpy as np
-import tqdm
+from tqdm import tqdm
 from pathlib import Path
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
@@ -46,7 +46,7 @@ def visualize_mask_folder(path_to_folder, offset=0):
     (path_to_folder.parent / f"visualized_{path_to_folder.stem}").mkdir(exist_ok=True)
     loaded_path = sorted(list(path_to_folder.iterdir()))
     # loaded_path = loaded_path[0:500]
-    for f in tqdm_1(loaded_path, desc='visualizing masks'):
+    for f in tqdm(loaded_path, desc='visualizing masks'):
         # visualize_mask(np.array(Image.open(f)) + offset, path_to_folder.parent / f"visualized_{path_to_folder.stem}" / f.name)
         rgbs = custom2rgb(np.array(Image.open(f)))
 
@@ -62,7 +62,7 @@ def custom2rgb(mask):
     mask_rgb[np.all(mask_convert == 0, axis=0)] = [0, 0, 0]             # cluster       black
 
     mask_rgb[np.all(mask_convert == 1, axis=0)] = [128, 0, 0]           # building      red
-    mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]         # road        grey  
+    mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]         # road        grey
     mask_rgb[np.all(mask_convert == 3, axis=0)] = [192, 0, 192]         # car           light violet
     mask_rgb[np.all(mask_convert == 4, axis=0)] = [0, 128, 0]           # tree          green
     mask_rgb[np.all(mask_convert == 5, axis=0)] = [128, 128, 0]         # vegetation    dark green
@@ -241,6 +241,7 @@ def test_opencv_video_format(codec, file_ext):
             return True
         return False
 
+extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -254,15 +255,12 @@ if __name__ == "__main__":
 
     if args.input:
         #zyq
-        used_files = []
-        for ext in ('*.JPG', '*.jpg', '*.png'):
-            used_files.extend(glob.glob(os.path.join(args.input[0], ext)))
-        
+        extensions = {".jpg", ".png", ".jpeg"}
+        used_files = [str(file) for file in Path(args.input[0]).rglob('*') if file.suffix.lower() in extensions] 
         used_files.sort()
-        print(len(used_files))
-        # used_files = used_files[:330]
+        print(f"pending files: {len(used_files)}")
 
-        for path in tqdm.tqdm(used_files, disable=not args.output):
+        for path in tqdm(used_files, disable=not args.output):
             path = str(path)
             #### use PIL, to be consistent with evaluation
             #### zyq: 把read_image写在这，并resize
@@ -271,40 +269,55 @@ if __name__ == "__main__":
                 # resize
                 image_width, image_height = image.size
                 if args.resize:
-                    image = image.resize((int(image_width/4), int(image_height/4))) 
+                    image = image.resize(
+                        (int(image_width / 4), int(image_height / 4)))
                 else:
-                    image = image.resize((int(image_width), int(image_height))) 
+                    image = image.resize((int(image_width), int(image_height)))
 
             ##### work around this bug: https://github.com/python-pillow/Pillow/issues/3973
             image = _apply_exif_orientation(image)
             img = convert_PIL_to_numpy(image, "BGR")
             # img = read_image(path, format="BGR")
 
-
-
             start_time = time.time()
-            augmentations = [A.HorizontalFlip(always_apply=True), A.RGBShift(always_apply=True), A.CLAHE(always_apply=True), A.RandomGamma(always_apply=True, gamma_limit=(80, 120)), A.RandomBrightnessContrast(always_apply=True),
-                             A.MedianBlur(blur_limit=7, always_apply=True), A.Sharpen(alpha=(0.2, 0.4), lightness=(0.5, 1.0), always_apply=True)]
-            augmentations.extend([A.Compose([augmentations[1], augmentations[2]]),
-                                  A.Compose([augmentations[2], augmentations[3]]),
-                                  A.Compose([augmentations[1], augmentations[3]]),
-                                  A.Compose([augmentations[2], augmentations[4]]),
-                                  A.Compose([augmentations[5], augmentations[6]])])
-            use_old_augmentation_method = False
-            
+            augmentations = [
+                A.HorizontalFlip(always_apply=True),
+                A.RGBShift(always_apply=True),
+                A.CLAHE(always_apply=True),
+                A.RandomGamma(always_apply=True, gamma_limit=(80, 120)),
+                A.RandomBrightnessContrast(always_apply=True),
+                A.MedianBlur(blur_limit=7, always_apply=True),
+                A.Sharpen(alpha=(0.2, 0.4),
+                          lightness=(0.5, 1.0),
+                          always_apply=True)
+            ]
+            augmentations.extend([
+                A.Compose([augmentations[1], augmentations[2]]),
+                A.Compose([augmentations[2], augmentations[3]]),
+                A.Compose([augmentations[1], augmentations[3]]),
+                A.Compose([augmentations[2], augmentations[4]]),
+                A.Compose([augmentations[5], augmentations[6]])
+            ])
+
             # NOTE 以下得到的semantic， instance， probability, confidences等全部是针对ADE20K的
             predictions_0, _ = demo.run_on_image(img, visualize=False)
-            
+
             # averaged_feats = predictions_0['res3_feats'].cpu()
-            list_aug_probs, list_aug_confs = [x.cpu() for x in predictions_0["panoptic_seg"][0]], [x.cpu() for x in predictions_0["panoptic_seg"][1]]
+            list_aug_probs, list_aug_confs = [
+                x.cpu() for x in predictions_0["panoptic_seg"][0]
+            ], [x.cpu() for x in predictions_0["panoptic_seg"][1]]
             for aud_idx, augmentation in enumerate(augmentations):
                 transformed_image = augmentation(image=img)["image"]
-                aug_pred, _ = demo.run_on_image(transformed_image, visualize=False)
+                aug_pred, _ = demo.run_on_image(transformed_image,
+                                                visualize=False)
                 if not aud_idx == 0:
-                    aug_probs, aug_conf = aug_pred["panoptic_seg"][0], aug_pred["panoptic_seg"][1]
+                    aug_probs, aug_conf = aug_pred["panoptic_seg"][
+                        0], aug_pred["panoptic_seg"][1]
                     # aug_feat = aug_pred['res3_feats']
                 else:
-                    aug_probs, aug_conf = aug_pred["panoptic_seg"][0], torch.fliplr(aug_pred["panoptic_seg"][1].permute((1, 2, 0))).permute((2, 0, 1))
+                    aug_probs, aug_conf = aug_pred["panoptic_seg"][
+                        0], torch.fliplr(aug_pred["panoptic_seg"][1].permute(
+                            (1, 2, 0))).permute((2, 0, 1))
                     # aug_feat = torch.fliplr(aug_pred['res3_feats'])
                 aug_probs = aug_probs.cpu()
                 aug_conf = aug_conf.cpu()
@@ -314,65 +327,68 @@ if __name__ == "__main__":
             # averaged_feats /= (len(augmentations) + 1)
             tta_handler_start_time = time.time()
             tta_handler = TTAHandler(list_aug_probs, list_aug_confs)
-            probabilities, confidences = tta_handler.find_tta_probabilities_and_masks()
-            print(f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s')
+            probabilities, confidences = tta_handler.find_tta_probabilities_and_masks(
+            )
+            print(
+                f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s'
+            )
             del tta_handler
             # todo: deleted visualizations for now, turn on if needed
-            predictions, visualized_output = demo.run_post_augmentation(img, probabilities, confidences, visualize=True)
+            predictions, visualized_output = demo.run_post_augmentation(
+                img, probabilities, confidences, visualize=True)
             # predictions, visualized_output = demo.run_post_augmentation(img, probabilities, confidences, visualize=False)
-            
-            predictions_no_tta, _ = demo.run_post_augmentation(img, predictions_0["panoptic_seg"][0], predictions_0["panoptic_seg"][1], visualize=False)
+
+            predictions_no_tta, _ = demo.run_post_augmentation(
+                img,
+                predictions_0["panoptic_seg"][0],
+                predictions_0["panoptic_seg"][1],
+                visualize=False)
             # predictions['res3_feats'] = averaged_feats
-            logger.info(
-                "{}: {} in {:.2f}s".format(
-                    path,
-                    "detected {} instances".format(len(predictions["instances"]))
-                    if "instances" in predictions
-                    else "finished",
-                    time.time() - start_time,
-                )
-            )
-
-            
-
+            logger.info("{}: {} in {:.2f}s".format(
+                path,
+                "detected {} instances".format(len(predictions["instances"]))
+                if "instances" in predictions else "finished",
+                time.time() - start_time,
+            ))
 
             if args.output:
                 if not os.path.exists(args.output):
                     os.mkdir(args.output)
-                if not os.path.exists(os.path.join(args.output, 'panoptic')):
-                    os.mkdir(os.path.join(args.output, 'panoptic'))
-                if not os.path.exists(os.path.join(args.output, 'visualized_ptz')):
-                    os.mkdir(os.path.join(args.output, 'visualized_ptz'))
-                
-                if visualized_output is not None:
-                    out_filename = os.path.join(args.output, 'visualized_ptz',os.path.basename(path))
-                    out_filename_noext, _ = os.path.splitext(out_filename)
-                    visualized_output.save(out_filename_noext + ".jpg")
-                    probabilities, confidences = predictions["panoptic_seg"][2], predictions["panoptic_seg"][3]
-                    entropy = probability_to_normalized_entropy(probabilities)
-                    load_and_save_with_entropy_and_confidence(out_filename_noext + ".jpg", entropy, confidences)
+                # if not os.path.exists(os.path.join(args.output, 'panoptic')):
+                # os.mkdir(os.path.join(args.output, 'panoptic'))
+                # if not os.path.exists(os.path.join(args.output, 'visualized_ptz')):
+                # os.mkdir(os.path.join(args.output, 'visualized_ptz'))
 
-                out_filename = os.path.join(args.output, 'panoptic',os.path.basename(path))
-                out_filename_noext, _ = os.path.splitext(out_filename)
-                save_panoptic(predictions, predictions_no_tta, demo, out_filename_noext + ".ptz")
-                
+                # if visualized_output is not None:
+                # out_filename = os.path.join(args.output, 'visualized_ptz',os.path.basename(path))
+                # out_filename_noext, _ = os.path.splitext(out_filename)
+                # visualized_output.save(out_filename_noext + ".jpg")
+                # probabilities, confidences = predictions["panoptic_seg"][2], predictions["panoptic_seg"][3]
+                # entropy = probability_to_normalized_entropy(probabilities)
+                # load_and_save_with_entropy_and_confidence(out_filename_noext + ".jpg", entropy, confidences)
+
+                # out_filename = os.path.join(args.output, 'panoptic',os.path.basename(path))
+                # out_filename_noext, _ = os.path.splitext(out_filename)
+                # save_panoptic(predictions, predictions_no_tta, demo, out_filename_noext + ".ptz")
+
                 #save semantic
                 mask, segments, _, _ = predictions["panoptic_seg"]
-                semantic = convert_from_mask_to_semantics_and_instances_no_remap(mask, segments)
+                semantic = convert_from_mask_to_semantics_and_instances_no_remap(
+                    mask, segments)
 
                 if not os.path.exists(os.path.join(args.output, 'labels_m2f')):
                     os.mkdir(os.path.join(args.output, 'labels_m2f'))
-                out_filename = os.path.join(args.output, 'labels_m2f',os.path.basename(path))
+                out_filename = os.path.join(args.output, 'labels_m2f',
+                                            os.path.basename(path))
                 out_filename_noext, _ = os.path.splitext(out_filename)
-                Image.fromarray(semantic.numpy().astype(np.uint16)).save(out_filename_noext+ ".png")
+                Image.fromarray(semantic.numpy().astype(
+                    np.uint16)).save(out_filename_noext + ".png")
 
             else:
-                print("something wrong in the code or input")       
-   
-        
-    dest = Path(args.output)
-    visualize_mask_folder(dest / "labels_m2f")        
+                print("something wrong in the code or input")
 
+    dest = Path(args.output)
+    visualize_mask_folder(dest / "labels_m2f")
 
     if args.output:
         if not os.path.exists(args.output):
@@ -382,9 +398,7 @@ if __name__ == "__main__":
         if not os.path.exists(os.path.join(args.output, 'visualized_ptz')):
             os.mkdir(os.path.join(args.output, 'visualized_ptz'))
 
-
-
-    label_m2f_path =  os.path.join(args.output, 'labels_m2f')
+    label_m2f_path = os.path.join(args.output, 'labels_m2f')
     save_path = args.output
     root_path = str(args.input[0])
 
@@ -392,34 +406,39 @@ if __name__ == "__main__":
     Path(os.path.join(save_path, 'alpha')).mkdir(exist_ok=True)
     Path(os.path.join(save_path, 'label')).mkdir(exist_ok=True)
 
-
-
     used_files = []
     for ext in ('*.png', '*.jpg'):
         used_files.extend(glob.glob(os.path.join(label_m2f_path, ext)))
     used_files.sort()
 
-    for m2f_file in tqdm.tqdm(used_files):
-        if os.path.exists(os.path.join(root_path, f"{Path(m2f_file).stem}.jpg")):
-            img = Image.open(os.path.join(root_path, f"{Path(m2f_file).stem}.jpg"))
-        elif os.path.exists(os.path.join(root_path, f"{Path(m2f_file).stem}.png")):
-            img = Image.open(os.path.join(root_path, f"{Path(m2f_file).stem}.png"))
+    for m2f_file in tqdm(used_files):
+        if os.path.exists(os.path.join(root_path,
+                                       f"{Path(m2f_file).stem}.jpg")):
+            img = Image.open(
+                os.path.join(root_path, f"{Path(m2f_file).stem}.jpg"))
+        elif os.path.exists(
+                os.path.join(root_path, f"{Path(m2f_file).stem}.png")):
+            img = Image.open(
+                os.path.join(root_path, f"{Path(m2f_file).stem}.png"))
         image_width, image_height = img.size
-        ####TODO  resize or not 
+        ####TODO  resize or not
 
         if args.resize:
-            img = img.resize((int(image_width/4), int(image_height/4))) 
+            img = img.resize((int(image_width / 4), int(image_height / 4)))
 
         img = np.array(img)
 
         color_ori = Image.open(m2f_file)
         color_width, color_height = color_ori.size
         color_label = custom2rgb(np.array(color_ori))
-        color_label = color_label.reshape((int(color_height), int(color_width),3))
+        color_label = color_label.reshape(
+            (int(color_height), int(color_width), 3))
 
         # print(img.shape)
         # print(color_label.shape)
 
         merge = 0.7 * img + 0.3 * color_label
-        Image.fromarray(merge.astype(np.uint8)).save(os.path.join(save_path, 'alpha',f"{Path(m2f_file).stem}.jpg"))
-        Image.fromarray(color_label.astype(np.uint8)).save(os.path.join(save_path, 'label',f"{Path(m2f_file).stem}.jpg"))
+        Image.fromarray(merge.astype(np.uint8)).save(
+            os.path.join(save_path, 'alpha', f"{Path(m2f_file).stem}.jpg"))
+        Image.fromarray(color_label.astype(np.uint8)).save(
+            os.path.join(save_path, 'label', f"{Path(m2f_file).stem}.jpg"))
