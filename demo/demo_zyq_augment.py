@@ -41,40 +41,52 @@ import math
 from detectron2.utils.file_io import PathManager
 from detectron2.data.detection_utils import _apply_exif_orientation, convert_PIL_to_numpy
 
+ori_w = 2000
+ori_h = 1333
 
-def visualize_mask_folder(path_to_folder, offset=0):
-    (path_to_folder.parent / f"visualized_{path_to_folder.stem}").mkdir(exist_ok=True)
-    loaded_path = sorted(list(path_to_folder.iterdir()))
-    # loaded_path = loaded_path[0:500]
-    for f in tqdm(loaded_path, desc='visualizing masks'):
-        # visualize_mask(np.array(Image.open(f)) + offset, path_to_folder.parent / f"visualized_{path_to_folder.stem}" / f.name)
-        rgbs = custom2rgb(np.array(Image.open(f)))
+extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
 
-        Image.fromarray(rgbs).save(path_to_folder.parent / f"visualized_{path_to_folder.stem}" / f.name)
+label_color = {
+    0: [0, 0, 0],  # cluster
+    1: [128, 0, 0],  # building
+    2: [192, 192, 192],  # road
+    3: [192, 0, 192],  # car
+    4: [0, 128, 0],  # tree
+    5: [128, 128, 0],  # vegetation
+    6: [255, 255, 0],  # human
+    7: [135, 206, 250],  # sky
+    8: [0, 0, 128],  # water
+    9: [252, 230, 201],  # ground
+    10: [128, 64, 128]  # mountain
+}
 
-
-
-
-def custom2rgb(mask):
+def label2rgb(mask):
     h, w = mask.shape[0], mask.shape[1]
     mask_rgb = np.zeros(shape=(h, w, 3), dtype=np.uint8)
     mask_convert = mask[np.newaxis, :, :]
-    mask_rgb[np.all(mask_convert == 0, axis=0)] = [0, 0, 0]             # cluster       black
-
-    mask_rgb[np.all(mask_convert == 1, axis=0)] = [128, 0, 0]           # building      red
-    mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]         # road        grey
-    mask_rgb[np.all(mask_convert == 3, axis=0)] = [192, 0, 192]         # car           light violet
-    mask_rgb[np.all(mask_convert == 4, axis=0)] = [0, 128, 0]           # tree          green
-    mask_rgb[np.all(mask_convert == 5, axis=0)] = [128, 128, 0]         # vegetation    dark green
-    mask_rgb[np.all(mask_convert == 6, axis=0)] = [255, 255, 0]         # human         yellow
-    mask_rgb[np.all(mask_convert == 7, axis=0)] = [135, 206, 250]       # sky           light blue
-    mask_rgb[np.all(mask_convert == 8, axis=0)] = [0, 0, 128]           # water         blue
-
-    mask_rgb[np.all(mask_convert == 9, axis=0)] = [252,230,201]          # ground      egg
-    mask_rgb[np.all(mask_convert == 10, axis=0)] = [128, 64, 128]        # mountain     dark violet
-
-    # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
+    for i in range(10):
+        mask_rgb[np.all(mask_convert == i, axis=0)] = label_color[i]
     return mask_rgb
+
+def visualize_mask_folder(path_to_folder, offset=0):
+
+    (path_to_folder.parent / f"visualized_{path_to_folder.stem}").mkdir(exist_ok=True)
+    (path_to_folder.parent / "labels_m2f").mkdir(exist_ok=True)
+
+    used_files = [str(file.relative_to(path_to_folder)) for file in path_to_folder.rglob('*') if file.suffix.lower() in extensions] 
+
+    for f in tqdm(used_files, desc='visualizing masks'):
+        label_img = Image.open(path_to_folder / f)
+        rgbs = label2rgb(np.array(label_img))
+        rgb_save_path = Path(path_to_folder.parent / f"visualized_{path_to_folder.stem}" / f)
+        rgb_save_path.parent.mkdir(exist_ok=True,parents=True)
+        Image.fromarray(rgbs).save(rgb_save_path)
+        
+        label_img = label_img.resize((ori_w, ori_h),Image.Resampling.NEAREST)
+        resize_save_path = Path(path_to_folder.parent / "labels_m2f" / f)
+        resize_save_path.parent.mkdir(exist_ok=True, parents=True)
+        label_img.save(resize_save_path)
+
 
 # constants
 WINDOW_NAME = "mask2former demo"
@@ -241,7 +253,7 @@ def test_opencv_video_format(codec, file_ext):
             return True
         return False
 
-extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
+resize_scale = 4
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -251,33 +263,31 @@ if __name__ == "__main__":
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
-    demo = VisualizationDemo(cfg)
+    demo = VisualizationDemo(cfg, True)
+
+    input_path = Path(args.input[0])
 
     if args.input:
-        #zyq
-        extensions = {".jpg", ".png", ".jpeg"}
-        used_files = [str(file) for file in Path(args.input[0]).rglob('*') if file.suffix.lower() in extensions] 
+        used_files = [str(file.relative_to(input_path)) for file in input_path.rglob('*') if file.suffix.lower() in extensions] 
         used_files.sort()
         print(f"pending files: {len(used_files)}")
 
-        for path in tqdm(used_files, disable=not args.output):
-            path = str(path)
-            #### use PIL, to be consistent with evaluation
-            #### zyq: 把read_image写在这，并resize
+        for relative_path in tqdm(used_files, disable=not args.output):
+            path = input_path / relative_path
+
             with PathManager.open(path, "rb") as f:
                 image = Image.open(f)
                 # resize
                 image_width, image_height = image.size
                 if args.resize:
                     image = image.resize(
-                        (int(image_width / 4), int(image_height / 4)))
+                        (int(image_width / resize_scale), int(image_height / resize_scale)))
                 else:
                     image = image.resize((int(image_width), int(image_height)))
 
             ##### work around this bug: https://github.com/python-pillow/Pillow/issues/3973
             image = _apply_exif_orientation(image)
             img = convert_PIL_to_numpy(image, "BGR")
-            # img = read_image(path, format="BGR")
 
             start_time = time.time()
             augmentations = [
@@ -302,7 +312,6 @@ if __name__ == "__main__":
             # NOTE 以下得到的semantic， instance， probability, confidences等全部是针对ADE20K的
             predictions_0, _ = demo.run_on_image(img, visualize=False)
 
-            # averaged_feats = predictions_0['res3_feats'].cpu()
             list_aug_probs, list_aug_confs = [
                 x.cpu() for x in predictions_0["panoptic_seg"][0]
             ], [x.cpu() for x in predictions_0["panoptic_seg"][1]]
@@ -318,20 +327,18 @@ if __name__ == "__main__":
                     aug_probs, aug_conf = aug_pred["panoptic_seg"][
                         0], torch.fliplr(aug_pred["panoptic_seg"][1].permute(
                             (1, 2, 0))).permute((2, 0, 1))
-                    # aug_feat = torch.fliplr(aug_pred['res3_feats'])
+
                 aug_probs = aug_probs.cpu()
                 aug_conf = aug_conf.cpu()
                 list_aug_probs.extend([x for x in aug_probs])
                 list_aug_confs.extend([x for x in aug_conf])
-                # averaged_feats += aug_feat.cpu()
-            # averaged_feats /= (len(augmentations) + 1)
+
+
             tta_handler_start_time = time.time()
             tta_handler = TTAHandler(list_aug_probs, list_aug_confs)
             probabilities, confidences = tta_handler.find_tta_probabilities_and_masks(
             )
-            print(
-                f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s'
-            )
+            print(f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s')
             del tta_handler
             # todo: deleted visualizations for now, turn on if needed
             predictions, visualized_output = demo.run_post_augmentation(
@@ -352,93 +359,57 @@ if __name__ == "__main__":
             ))
 
             if args.output:
-                if not os.path.exists(args.output):
-                    os.mkdir(args.output)
-                # if not os.path.exists(os.path.join(args.output, 'panoptic')):
-                # os.mkdir(os.path.join(args.output, 'panoptic'))
-                # if not os.path.exists(os.path.join(args.output, 'visualized_ptz')):
-                # os.mkdir(os.path.join(args.output, 'visualized_ptz'))
+                output_path = Path(args.output)
+                output_path.mkdir(exist_ok= True, parents=True)
+                Path(output_path / "labels_m2f_ori").mkdir(exist_ok= True, parents=True)
+                Path(output_path / "visualized_labels_m2f_ori").mkdir(exist_ok=True)
+                Path(output_path / "labels_m2f").mkdir(exist_ok=True)
+                Path(output_path / 'alpha').mkdir(exist_ok=True)
+                Path(output_path / 'visualized_ptz').mkdir(exist_ok=True)
+                Path(output_path / 'panoptic').mkdir(exist_ok=True)
 
-                # if visualized_output is not None:
-                # out_filename = os.path.join(args.output, 'visualized_ptz',os.path.basename(path))
-                # out_filename_noext, _ = os.path.splitext(out_filename)
-                # visualized_output.save(out_filename_noext + ".jpg")
-                # probabilities, confidences = predictions["panoptic_seg"][2], predictions["panoptic_seg"][3]
-                # entropy = probability_to_normalized_entropy(probabilities)
-                # load_and_save_with_entropy_and_confidence(out_filename_noext + ".jpg", entropy, confidences)
 
-                # out_filename = os.path.join(args.output, 'panoptic',os.path.basename(path))
-                # out_filename_noext, _ = os.path.splitext(out_filename)
-                # save_panoptic(predictions, predictions_no_tta, demo, out_filename_noext + ".ptz")
 
                 #save semantic
                 mask, segments, _, _ = predictions["panoptic_seg"]
                 semantic = convert_from_mask_to_semantics_and_instances_no_remap(
                     mask, segments)
 
-                if not os.path.exists(os.path.join(args.output, 'labels_m2f')):
-                    os.mkdir(os.path.join(args.output, 'labels_m2f'))
-                out_filename = os.path.join(args.output, 'labels_m2f',
-                                            os.path.basename(path))
-                out_filename_noext, _ = os.path.splitext(out_filename)
-                Image.fromarray(semantic.numpy().astype(
-                    np.uint16)).save(out_filename_noext + ".png")
+                output_file = Path(output_path / 'labels_m2f_ori' / relative_path).with_suffix(".png")
+                out_file_path = output_file.parent
+                out_file_path.mkdir(exist_ok=True,parents=True)
+                label_img = Image.fromarray(semantic.numpy().astype(np.uint8))
+                label_img.save(output_file.with_suffix(".png"))
+                
+                # add
+                rgbs = label2rgb(np.array(label_img))
+                rgb_save_path = Path(output_path / f"visualized_labels_m2f_ori" / relative_path).with_suffix(".png")
+                rgb_save_path.parent.mkdir(exist_ok=True,parents=True)
+                Image.fromarray(rgbs).save(rgb_save_path)
 
+                label_img = label_img.resize((ori_w, ori_h),Image.Resampling.NEAREST)
+                resize_save_path = Path(output_path / "labels_m2f" / relative_path).with_suffix(".png")
+                resize_save_path.parent.mkdir(exist_ok=True, parents=True)
+                label_img.save(resize_save_path)
+
+                merge = 0.5 * rgbs + 0.5 * img
+                merge_save_path = Path(output_path / "alpha" / relative_path).with_suffix(".png")
+                merge_save_path.parent.mkdir(exist_ok=True, parents=True)
+                Image.fromarray(merge.astype(np.uint8)).save(merge_save_path)
+
+
+                if visualized_output is not None:
+                    visualized_ptz_save_path = Path(output_path / f"visualized_ptz" / relative_path).with_suffix(".jpg")
+                    visualized_ptz_save_path.parent.mkdir(exist_ok=True, parents=True)
+                    visualized_output.save(visualized_ptz_save_path)
+
+                    probabilities, confidences = predictions["panoptic_seg"][2], predictions["panoptic_seg"][3]
+                    entropy = probability_to_normalized_entropy(probabilities)
+                    load_and_save_with_entropy_and_confidence(str(visualized_ptz_save_path), entropy, confidences)
+
+                    panoptic_save_path = Path(output_path / f"panoptic" / relative_path).with_suffix(".ptz")
+                    panoptic_save_path.parent.mkdir(exist_ok=True, parents=True)
+                    save_panoptic(predictions, predictions_no_tta, demo, panoptic_save_path)
             else:
                 print("something wrong in the code or input")
 
-    dest = Path(args.output)
-    visualize_mask_folder(dest / "labels_m2f")
-
-    if args.output:
-        if not os.path.exists(args.output):
-            os.mkdir(args.output)
-        if not os.path.exists(os.path.join(args.output, 'panoptic')):
-            os.mkdir(os.path.join(args.output, 'panoptic'))
-        if not os.path.exists(os.path.join(args.output, 'visualized_ptz')):
-            os.mkdir(os.path.join(args.output, 'visualized_ptz'))
-
-    label_m2f_path = os.path.join(args.output, 'labels_m2f')
-    save_path = args.output
-    root_path = str(args.input[0])
-
-    Path(save_path).mkdir(exist_ok=True)
-    Path(os.path.join(save_path, 'alpha')).mkdir(exist_ok=True)
-    Path(os.path.join(save_path, 'label')).mkdir(exist_ok=True)
-
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob.glob(os.path.join(label_m2f_path, ext)))
-    used_files.sort()
-
-    for m2f_file in tqdm(used_files):
-        if os.path.exists(os.path.join(root_path,
-                                       f"{Path(m2f_file).stem}.jpg")):
-            img = Image.open(
-                os.path.join(root_path, f"{Path(m2f_file).stem}.jpg"))
-        elif os.path.exists(
-                os.path.join(root_path, f"{Path(m2f_file).stem}.png")):
-            img = Image.open(
-                os.path.join(root_path, f"{Path(m2f_file).stem}.png"))
-        image_width, image_height = img.size
-        ####TODO  resize or not
-
-        if args.resize:
-            img = img.resize((int(image_width / 4), int(image_height / 4)))
-
-        img = np.array(img)
-
-        color_ori = Image.open(m2f_file)
-        color_width, color_height = color_ori.size
-        color_label = custom2rgb(np.array(color_ori))
-        color_label = color_label.reshape(
-            (int(color_height), int(color_width), 3))
-
-        # print(img.shape)
-        # print(color_label.shape)
-
-        merge = 0.7 * img + 0.3 * color_label
-        Image.fromarray(merge.astype(np.uint8)).save(
-            os.path.join(save_path, 'alpha', f"{Path(m2f_file).stem}.jpg"))
-        Image.fromarray(color_label.astype(np.uint8)).save(
-            os.path.join(save_path, 'label', f"{Path(m2f_file).stem}.jpg"))
