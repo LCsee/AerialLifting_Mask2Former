@@ -44,6 +44,8 @@ from detectron2.data.detection_utils import _apply_exif_orientation, convert_PIL
 ori_w = 2000
 ori_h = 1333
 
+resize_scale = 2
+
 extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
 
 label_color = {
@@ -60,6 +62,7 @@ label_color = {
     10: [128, 64, 128]  # mountain
 }
 
+
 def label2rgb(mask):
     h, w = mask.shape[0], mask.shape[1]
     mask_rgb = np.zeros(shape=(h, w, 3), dtype=np.uint8)
@@ -68,21 +71,28 @@ def label2rgb(mask):
         mask_rgb[np.all(mask_convert == i, axis=0)] = label_color[i]
     return mask_rgb
 
+
 def visualize_mask_folder(path_to_folder, offset=0):
 
-    (path_to_folder.parent / f"visualized_{path_to_folder.stem}").mkdir(exist_ok=True)
+    (path_to_folder.parent /
+     f"visualized_{path_to_folder.stem}").mkdir(exist_ok=True)
     (path_to_folder.parent / "labels_m2f").mkdir(exist_ok=True)
 
-    used_files = [str(file.relative_to(path_to_folder)) for file in path_to_folder.rglob('*') if file.suffix.lower() in extensions] 
+    used_files = [
+        str(file.relative_to(path_to_folder))
+        for file in path_to_folder.rglob('*')
+        if file.suffix.lower() in extensions
+    ]
 
     for f in tqdm(used_files, desc='visualizing masks'):
         label_img = Image.open(path_to_folder / f)
         rgbs = label2rgb(np.array(label_img))
-        rgb_save_path = Path(path_to_folder.parent / f"visualized_{path_to_folder.stem}" / f)
-        rgb_save_path.parent.mkdir(exist_ok=True,parents=True)
+        rgb_save_path = Path(path_to_folder.parent /
+                             f"visualized_{path_to_folder.stem}" / f)
+        rgb_save_path.parent.mkdir(exist_ok=True, parents=True)
         Image.fromarray(rgbs).save(rgb_save_path)
-        
-        label_img = label_img.resize((ori_w, ori_h),Image.Resampling.NEAREST)
+
+        label_img = label_img.resize((ori_w, ori_h), Image.Resampling.NEAREST)
         resize_save_path = Path(path_to_folder.parent / "labels_m2f" / f)
         resize_save_path.parent.mkdir(exist_ok=True, parents=True)
         label_img.save(resize_save_path)
@@ -90,12 +100,16 @@ def visualize_mask_folder(path_to_folder, offset=0):
 
 # constants
 WINDOW_NAME = "mask2former demo"
-def convert_from_mask_to_semantics_and_instances_no_remap(original_mask, segments):
+
+
+def convert_from_mask_to_semantics_and_instances_no_remap(
+        original_mask, segments):
     id_to_class = torch.zeros(1024).int()
     original_mask = original_mask.cpu()
     for s in segments:
         id_to_class[s['id']] = s['category_id']
-    return id_to_class[original_mask.flatten().numpy().tolist()].reshape(original_mask.shape)
+    return id_to_class[original_mask.flatten().numpy().tolist()].reshape(
+        original_mask.shape)
 
 
 def setup_cfg(args):
@@ -129,18 +143,26 @@ def visualize_tensor(tensor, minval=0.000, maxval=1.00, use_global_norm=True):
 def probability_to_normalized_entropy(probabilities):
     entropy = torch.zeros_like(probabilities[:, :, 0])
     for i in range(probabilities.shape[2]):
-        entropy = entropy - probabilities[:, :, i] * torch.log2(probabilities[:, :, i] + 1e-8)
+        entropy = entropy - probabilities[:, :, i] * torch.log2(
+            probabilities[:, :, i] + 1e-8)
     entropy = entropy / math.log2(probabilities.shape[2])
     return entropy
 
 
-def load_and_save_with_entropy_and_confidence(out_filename, entropy, confidences):
+def load_and_save_with_entropy_and_confidence(out_filename, entropy,
+                                              confidences):
     from torchvision.io import read_image
     from torchvision.utils import save_image
     org_img = read_image(out_filename).float() / 255.0
     e_img = visualize_tensor(1 - entropy)
     c_img = visualize_tensor(confidences)
-    save_image(torch.cat([org_img.unsqueeze(0), e_img.unsqueeze(0), c_img.unsqueeze(0)], dim=0), out_filename, value_range=(0, 1), normalize=True)
+    save_image(torch.cat(
+        [org_img.unsqueeze(0),
+         e_img.unsqueeze(0),
+         c_img.unsqueeze(0)], dim=0),
+               out_filename,
+               value_range=(0, 1),
+               normalize=True)
 
 
 def save_panoptic(predictions, predictions_notta, _demo, out_filename):
@@ -149,7 +171,8 @@ def save_panoptic(predictions, predictions_notta, _demo, out_filename):
         mask_notta, segments_notta = predictions_notta["panoptic_seg"]
         confidences_notta = torch.zeros_like(mask_notta)
     else:
-        mask_notta, segments_notta, _, confidences_notta = predictions_notta["panoptic_seg"]
+        mask_notta, segments_notta, _, confidences_notta = predictions_notta[
+            "panoptic_seg"]
     # since we use cat_ids from scannet, no need for mapping
     # for segment in segments:
     #     cat_id = segment["category_id"]
@@ -165,23 +188,26 @@ def save_panoptic(predictions, predictions_notta, _demo, out_filename):
                 "probabilities": probabilities,
                 "confidences": confidences,
                 # "feats": predictions["res3_feats"]
-            }, fid
-        )
+            },
+            fid)
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="maskformer2 demo for builtin configs")
+    parser = argparse.ArgumentParser(
+        description="maskformer2 demo for builtin configs")
     parser.add_argument(
         "--config-file",
-        default="configs/coco/panoptic-segmentation/maskformer2_R50_bs16_50ep.yaml",
+        default=
+        "configs/coco/panoptic-segmentation/maskformer2_R50_bs16_50ep.yaml",
         metavar="FILE",
         help="path to config file",
     )
     parser.add_argument(
         "--predictions",
-        help="Save raw predictions together with visualizations."
-    )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
+        help="Save raw predictions together with visualizations.")
+    parser.add_argument("--webcam",
+                        action="store_true",
+                        help="Take inputs from webcam.")
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
@@ -253,7 +279,6 @@ def test_opencv_video_format(codec, file_ext):
             return True
         return False
 
-resize_scale = 4
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -268,7 +293,10 @@ if __name__ == "__main__":
     input_path = Path(args.input[0])
 
     if args.input:
-        used_files = [str(file.relative_to(input_path)) for file in input_path.rglob('*') if file.suffix.lower() in extensions] 
+        used_files = [
+            str(file.relative_to(input_path)) for file in input_path.rglob('*')
+            if file.suffix.lower() in extensions
+        ]
         used_files.sort()
         print(f"pending files: {len(used_files)}")
 
@@ -280,8 +308,8 @@ if __name__ == "__main__":
                 # resize
                 image_width, image_height = image.size
                 if args.resize:
-                    image = image.resize(
-                        (int(image_width / resize_scale), int(image_height / resize_scale)))
+                    image = image.resize((int(image_width / resize_scale),
+                                          int(image_height / resize_scale)))
                 else:
                     image = image.resize((int(image_width), int(image_height)))
 
@@ -333,12 +361,13 @@ if __name__ == "__main__":
                 list_aug_probs.extend([x for x in aug_probs])
                 list_aug_confs.extend([x for x in aug_conf])
 
-
             tta_handler_start_time = time.time()
             tta_handler = TTAHandler(list_aug_probs, list_aug_confs)
             probabilities, confidences = tta_handler.find_tta_probabilities_and_masks(
             )
-            print(f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s')
+            print(
+                f'TTA Handler time: {time.time() - tta_handler_start_time:.2f}s'
+            )
             del tta_handler
             # todo: deleted visualizations for now, turn on if needed
             predictions, visualized_output = demo.run_post_augmentation(
@@ -360,56 +389,69 @@ if __name__ == "__main__":
 
             if args.output:
                 output_path = Path(args.output)
-                output_path.mkdir(exist_ok= True, parents=True)
-                Path(output_path / "labels_m2f_ori").mkdir(exist_ok= True, parents=True)
-                Path(output_path / "visualized_labels_m2f_ori").mkdir(exist_ok=True)
+                output_path.mkdir(exist_ok=True, parents=True)
+                Path(output_path / "labels_m2f_ori").mkdir(exist_ok=True,
+                                                           parents=True)
+                Path(output_path /
+                     "visualized_labels_m2f_ori").mkdir(exist_ok=True)
                 Path(output_path / "labels_m2f").mkdir(exist_ok=True)
                 Path(output_path / 'alpha').mkdir(exist_ok=True)
                 Path(output_path / 'visualized_ptz').mkdir(exist_ok=True)
                 Path(output_path / 'panoptic').mkdir(exist_ok=True)
-
-
 
                 #save semantic
                 mask, segments, _, _ = predictions["panoptic_seg"]
                 semantic = convert_from_mask_to_semantics_and_instances_no_remap(
                     mask, segments)
 
-                output_file = Path(output_path / 'labels_m2f_ori' / relative_path).with_suffix(".png")
+                output_file = Path(output_path / 'labels_m2f_ori' /
+                                   relative_path).with_suffix(".png")
                 out_file_path = output_file.parent
-                out_file_path.mkdir(exist_ok=True,parents=True)
+                out_file_path.mkdir(exist_ok=True, parents=True)
                 label_img = Image.fromarray(semantic.numpy().astype(np.uint8))
                 label_img.save(output_file.with_suffix(".png"))
-                
+
                 # add
                 rgbs = label2rgb(np.array(label_img))
-                rgb_save_path = Path(output_path / f"visualized_labels_m2f_ori" / relative_path).with_suffix(".png")
-                rgb_save_path.parent.mkdir(exist_ok=True,parents=True)
+                rgb_save_path = Path(output_path /
+                                     f"visualized_labels_m2f_ori" /
+                                     relative_path).with_suffix(".png")
+                rgb_save_path.parent.mkdir(exist_ok=True, parents=True)
                 Image.fromarray(rgbs).save(rgb_save_path)
 
-                label_img = label_img.resize((ori_w, ori_h),Image.Resampling.NEAREST)
-                resize_save_path = Path(output_path / "labels_m2f" / relative_path).with_suffix(".png")
+                label_img = label_img.resize((ori_w, ori_h),
+                                             Image.Resampling.NEAREST)
+                resize_save_path = Path(output_path / "labels_m2f" /
+                                        relative_path).with_suffix(".png")
                 resize_save_path.parent.mkdir(exist_ok=True, parents=True)
                 label_img.save(resize_save_path)
 
                 merge = 0.5 * rgbs + 0.5 * img
-                merge_save_path = Path(output_path / "alpha" / relative_path).with_suffix(".png")
+                merge_save_path = Path(output_path / "alpha" /
+                                       relative_path).with_suffix(".png")
                 merge_save_path.parent.mkdir(exist_ok=True, parents=True)
                 Image.fromarray(merge.astype(np.uint8)).save(merge_save_path)
 
-
                 if visualized_output is not None:
-                    visualized_ptz_save_path = Path(output_path / f"visualized_ptz" / relative_path).with_suffix(".jpg")
-                    visualized_ptz_save_path.parent.mkdir(exist_ok=True, parents=True)
+                    visualized_ptz_save_path = Path(
+                        output_path / f"visualized_ptz" /
+                        relative_path).with_suffix(".jpg")
+                    visualized_ptz_save_path.parent.mkdir(exist_ok=True,
+                                                          parents=True)
                     visualized_output.save(visualized_ptz_save_path)
 
-                    probabilities, confidences = predictions["panoptic_seg"][2], predictions["panoptic_seg"][3]
+                    probabilities, confidences = predictions["panoptic_seg"][
+                        2], predictions["panoptic_seg"][3]
                     entropy = probability_to_normalized_entropy(probabilities)
-                    load_and_save_with_entropy_and_confidence(str(visualized_ptz_save_path), entropy, confidences)
+                    load_and_save_with_entropy_and_confidence(
+                        str(visualized_ptz_save_path), entropy, confidences)
 
-                    panoptic_save_path = Path(output_path / f"panoptic" / relative_path).with_suffix(".ptz")
-                    panoptic_save_path.parent.mkdir(exist_ok=True, parents=True)
-                    save_panoptic(predictions, predictions_no_tta, demo, panoptic_save_path)
+                    panoptic_save_path = Path(
+                        output_path / f"panoptic" /
+                        relative_path).with_suffix(".ptz")
+                    panoptic_save_path.parent.mkdir(exist_ok=True,
+                                                    parents=True)
+                    save_panoptic(predictions, predictions_no_tta, demo,
+                                  panoptic_save_path)
             else:
                 print("something wrong in the code or input")
-
