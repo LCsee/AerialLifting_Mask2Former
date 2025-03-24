@@ -44,7 +44,11 @@ from detectron2.data.detection_utils import _apply_exif_orientation, convert_PIL
 ori_w = 2000
 ori_h = 1333
 
+<<<<<<< HEAD
 resize_scale = 2
+=======
+resize_scale = 1
+>>>>>>> 5f1b99bcef6e51aa27025e0afffd9c2736ca8270
 
 extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
 
@@ -300,7 +304,7 @@ if __name__ == "__main__":
         used_files.sort()
         print(f"pending files: {len(used_files)}")
 
-        for relative_path in tqdm(used_files, disable=not args.output):
+        for relative_path in tqdm(used_files[408:410], disable=not args.output):
             path = input_path / relative_path
 
             with PathManager.open(path, "rb") as f:
