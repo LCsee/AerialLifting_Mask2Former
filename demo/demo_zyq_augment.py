@@ -44,11 +44,7 @@ from detectron2.data.detection_utils import _apply_exif_orientation, convert_PIL
 ori_w = 2000
 ori_h = 1333
 
-<<<<<<< HEAD
 resize_scale = 2
-=======
-resize_scale = 1
->>>>>>> 5f1b99bcef6e51aa27025e0afffd9c2736ca8270
 
 extensions = {".jpg", ".png", ".tif", ".jpeg", ".tiff"}
 
