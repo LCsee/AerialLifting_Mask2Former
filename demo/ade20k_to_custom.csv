@@ -41,7 +41,7 @@ cushion,-1
 base pedestal stand,-1
 box,-1
 column pillar,1
-signboard sign,-1
+signboard sign,12
 chest of drawers chest bureau dresser,-1
 counter,-1
 sand,9
@@ -85,13 +85,13 @@ truck,3
 tower,1
 chandelier,-1
 awning sunshade sunblind,-1
-street lamp,-1
+street lamp,11
 booth,-1
 tv,-1
 plane,-1
 dirt track,2
 clothes,-1
-pole,-1
+pole,11
 land ground soil,9
 bannister banister balustrade balusters handrail,-1
 escalator moving staircase moving stairway,-1
@@ -134,7 +134,7 @@ sculpture,-1
 hood exhaust hood,-1
 sconce,-1
 vase,-1
-traffic light,-1
+traffic light,11
 tray,-1
 trash can,-1
 fan,-1

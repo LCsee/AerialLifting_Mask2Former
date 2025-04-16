@@ -42,7 +42,7 @@ from detectron2.utils.file_io import PathManager
 from detectron2.data.detection_utils import _apply_exif_orientation, convert_PIL_to_numpy
 
 ori_w = 2000
-ori_h = 1333
+ori_h = 1500
 
 resize_scale = 2
 
@@ -59,7 +59,9 @@ label_color = {
     7: [135, 206, 250],  # sky
     8: [0, 0, 128],  # water
     9: [252, 230, 201],  # ground
-    10: [128, 64, 128]  # mountain
+    10: [128, 64, 128],  # mountain
+    11: [255, 0, 255], # 路灯，信号灯
+    12: [0, 255, 255] # 路牌
 }
 
 
@@ -319,15 +321,22 @@ if __name__ == "__main__":
 
             start_time = time.time()
             augmentations = [
-                A.HorizontalFlip(always_apply=True),
-                A.RGBShift(always_apply=True),
-                A.CLAHE(always_apply=True),
-                A.RandomGamma(always_apply=True, gamma_limit=(80, 120)),
-                A.RandomBrightnessContrast(always_apply=True),
-                A.MedianBlur(blur_limit=7, always_apply=True),
-                A.Sharpen(alpha=(0.2, 0.4),
-                          lightness=(0.5, 1.0),
-                          always_apply=True)
+                # A.HorizontalFlip(always_apply=True),
+                # A.RGBShift(always_apply=True),
+                # A.CLAHE(always_apply=True),
+                # A.RandomGamma(always_apply=True, gamma_limit=(80, 120)),
+                # A.RandomBrightnessContrast(always_apply=True),
+                # A.MedianBlur(blur_limit=7, always_apply=True),
+                # A.Sharpen(alpha=(0.2, 0.4),
+                #           lightness=(0.5, 1.0),
+                #           always_apply=True)
+                A.HorizontalFlip(),
+                A.RGBShift(),
+                A.CLAHE(),
+                A.RandomGamma(gamma_limit=(80, 120)),
+                A.RandomBrightnessContrast(),
+                A.MedianBlur(blur_limit=7),
+                A.Sharpen(alpha=(0.2, 0.4), lightness=(0.5, 1.0)),
             ]
             augmentations.extend([
                 A.Compose([augmentations[1], augmentations[2]]),

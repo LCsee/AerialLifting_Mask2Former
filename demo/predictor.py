@@ -379,13 +379,13 @@ def hex_to_rgb(x):
 
 def get_scannet_classes():
     class_names = ["none"]
-    for cllist in [x.strip().split(',') for x in Path(f"demo/scannet_{sc_version}_things.csv").read_text().strip().splitlines()]:
+    for cllist in [x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/scannet_{sc_version}_things.csv").read_text().strip().splitlines()]:
         class_names.append(cllist[0])
     return class_names
 
 def get_scannet_classes_zyq_mapping():
     class_names = ["none"]
-    for cllist in [x.strip().split(',') for x in Path(f"demo/zyq_custom.csv").read_text().strip().splitlines()]:
+    for cllist in [x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/zyq_custom.csv").read_text().strip().splitlines()]:
         class_names.append(cllist[0])
     return class_names
 

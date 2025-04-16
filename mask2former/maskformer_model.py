@@ -22,21 +22,21 @@ from .modeling.matcher import HungarianMatcher
 
 def get_thing_semantics():
     thing_semantics = [False]
-    for cllist in [x.strip().split(',') for x in Path(f"demo/scannet_{sc_version}_things.csv").read_text().strip().splitlines()]:
+    for cllist in [x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/scannet_{sc_version}_things.csv").read_text().strip().splitlines()]:
     # for cllist in [x.strip().split(',') for x in Path(f"objectInfo150.csv").read_text().strip().splitlines()]:
         thing_semantics.append(bool(int(cllist[1])))
     return [i for i in range(len(thing_semantics)) if thing_semantics[i]], len(thing_semantics)
 
 def get_thing_semantics_zyq():
     thing_semantics = [False]
-    for cllist in [x.strip().split(',') for x in Path(f"demo/zyq_custom.csv").read_text().strip().splitlines()]:
+    for cllist in [x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/zyq_custom.csv").read_text().strip().splitlines()]:
         thing_semantics.append(bool(int(cllist[1])))
     return [i for i in range(len(thing_semantics)) if thing_semantics[i]], len(thing_semantics)
 
 def get_coco_to_scannet():
     coco_to_scannet = []
     invalid_classes = []
-    for cidx, cllist in enumerate([x.strip().split(',') for x in Path(f"demo/coco_to_scannet_{sc_version}.csv").read_text().strip().splitlines()]):
+    for cidx, cllist in enumerate([x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/coco_to_scannet_{sc_version}.csv").read_text().strip().splitlines()]):
 
         if int(cllist[1]) != -1:
             coco_to_scannet.append(int(cllist[1]))
@@ -48,7 +48,7 @@ def get_coco_to_scannet():
 def get_ade_to_custom_zyq():
     coco_to_scannet = []
     invalid_classes = []
-    for cidx, cllist in enumerate([x.strip().split(',') for x in Path(f"demo/ade20k_to_custom.csv").read_text().strip().splitlines()]):
+    for cidx, cllist in enumerate([x.strip().split(',') for x in Path(f"../../thirdparty/AerialLifting_Mask2Former/demo/ade20k_to_custom.csv").read_text().strip().splitlines()]):
         if int(cllist[1]) != -1:
             coco_to_scannet.append(int(cllist[1]))
         else:
