@@ -302,7 +302,7 @@ if __name__ == "__main__":
         used_files.sort()
         print(f"pending files: {len(used_files)}")
 
-        for relative_path in tqdm(used_files[408:410], disable=not args.output):
+        for relative_path in tqdm(used_files, disable=not args.output):
             path = input_path / relative_path
 
             with PathManager.open(path, "rb") as f:
